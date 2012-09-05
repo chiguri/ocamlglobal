@@ -1,0 +1,49 @@
+
+OCaml Global Tagger:
+
+A plugin for GNU Global which tags OCaml source code, using CamlP4 for versions
+3.10 of OCaml and above. Provides ocaml_tags, which creates tags for ml and mli
+files, and an ogtags script that wraps a gtags call with the ocaml_tags plugin.
+
+On Sourceforge:
+
+    https://sourceforge.net/projects/ocamlglobaltags/
+
+Requires:
+
+    OCaml 3.10 or above
+    CamlP4
+    GNU Global (will compile without it)
+
+Install:
+
+    ./configure
+    make
+    make install
+
+(No surprises).
+
+Usage:
+
+    ocaml_tags: will produce a list of tags for a given list of input files.
+    ogtags: will run gtags with ocaml_tags plugged in.
+
+Caveats:
+
+    ocaml_tags uses the CamlP4 parser, hence if the source code contains errors,
+    the tagger will balk.  I recommend setting up your make file to run "ogtags
+    --incremental" *after* compilation.
+
+From SVN checkout:
+
+    Before ./configure &c., run "autoreconf" and "automake --add-missing" as
+    required.
+
+Authors:
+
+    Matthew Hague (matth1982@gmail.com)
+
+License:
+
+    Distributed under the GNU General Public License version 3, which is
+    distributed in the COPYING file.
