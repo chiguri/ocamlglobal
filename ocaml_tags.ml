@@ -75,10 +75,29 @@ struct
     
   let make_tag tag loc line = (tag, loc, line)
 
+(* Not used : all flags are defined as specific types *)
   let mb_bool mb = 
     match mb with
       Ast.BTrue -> true
     | _ -> false
+
+  let vf_bool = function
+  Ast.ViVirtual -> true
+    | _ -> false
+
+  let mf_bool = function
+  Ast.MuMutable -> true
+    | _ -> false
+
+  let pf_bool = function
+  Ast.PrPrivate -> true
+    | _ -> false
+
+  let of_bool = function
+  Ast.OvOverride -> true
+    | _ -> false
+
+
 
   let rec ident_tagname ident = 
     match ident with
@@ -219,7 +238,7 @@ struct
     match ast with
       (* (virtual)? i ([ t ])? *)
     | Ast.CtCon(loc, mb, i, t) -> 
-        let line = if (mb_bool mb) then "class virtual " else "class " in
+        let line = if (vf_bool mb) then "class virtual " else "class " in
         let i_name = ident_tagname i in
         [make_tag i_name loc (line ^ i_name)]
       (* [t] -> ct *)
@@ -242,16 +261,16 @@ struct
         List.append (class_sig_item_info csg1) (class_sig_item_info csg2)
       (* method s : t or method private s : t *)
     | Ast.CgMth(loc, s, mb, t) -> 
-        let line = if (mb_bool mb) then "method private " else "method " in
+        let line = if (pf_bool mb) then "method private " else "method " in
         [make_tag s loc (line ^ s)]
       (* value (virtual)? (mutable)? s : t *)
     | Ast.CgVal(loc, s, mb1, mb2, t) -> 
-        let line1 = if (mb_bool mb1) then "virtual " else "" in
-        let line2 = if (mb_bool mb2) then "mutable " else "" in
+        let line2 = if (mf_bool mb1) then "virtual " else "" in
+        let line1 = if (vf_bool mb2) then "mutable " else "" in
         [make_tag s loc (line1 ^ line2 ^ s)]
       (* method virtual (mutable)? s : t *)
     | Ast.CgVir(loc, s, mb, t) -> 
-        let line = if (mb_bool mb) then "method virtual " else "method " in
+        let line = if (pf_bool mb) then "method virtual " else "method " in
         [make_tag s loc (line ^ s)]
     | _ -> []
   and class_str_item_info ast =
@@ -260,20 +279,22 @@ struct
       Ast.CrSem(loc, cst1, cst2) -> 
         List.append (class_str_item_info cst1) (class_str_item_info cst2)
       (* method (private)? s : t = e or method (private)? s = e *)
-    | Ast.CrMth(loc, s, mb, e, t) -> 
-        let line = if (mb_bool mb) then "method private " else "method " in
-        [make_tag s loc (line ^ s)]
+    | Ast.CrMth(loc, s, mb1, mb2, e, t) -> 
+        let line1 = if (of_bool mb1) then "override " else "" in
+        let line2 = if (pf_bool mb2) then "method private " else "method " in
+        [make_tag s loc (line1 ^ line2 ^ s)]
       (* value (mutable)? s = e *)
-    | Ast.CrVal(loc, s, mb, e) -> 
-        let line = if (mb_bool mb) then "value mutable " else "value " in
-        [make_tag s loc (line ^ s)]
+    | Ast.CrVal(loc, s, mb1, mb2, e) -> 
+        let line1 = if (of_bool mb1) then "override " else "" in
+        let line2 = if (mf_bool mb2) then "value mutable " else "value " in
+        [make_tag s loc (line1 ^ line2 ^ s)]
       (* method virtual (private)? s : t *)
     | Ast.CrVir(loc, s, mb, t) -> 
-        let line = if (mb_bool mb) then "method virtual private " else "method virtual " in
+        let line = if (pf_bool mb) then "method virtual private " else "method virtual " in
         [make_tag s loc (line ^ s)]
       (* value virtual (private)? s : t *)
     | Ast.CrVvr(loc, s, mb, t) -> 
-        let line = if (mb_bool mb) then "value virtual private " else "value virtual " in
+        let line = if (mf_bool mb) then "value virtual private " else "value virtual " in
         [make_tag s loc (line ^ s)]
     | _ -> []
 
@@ -284,7 +305,7 @@ struct
       (* (virtual)? i ([ t ])? *)
     | Ast.CeCon(loc, mb, i, t) -> 
         let tag_name = ident_tagname i in
-        let line = if (mb_bool mb) then "class virtual " else "class " in
+        let line = if (vf_bool mb) then "class virtual " else "class " in
         [make_tag tag_name loc (line ^ tag_name)]
       (* fun p -> ce *)
     | Ast.CeFun(loc, p, ce) -> (class_expr_info ce)
