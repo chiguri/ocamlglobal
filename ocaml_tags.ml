@@ -138,13 +138,16 @@ struct
         let i_name = ident_tagname i in
         [make_tag i_name loc i_name]
       (* type t 'a 'b 'c = t constraint t = t constraint t = t *)
-    | Ast.TyDcl(loc, s, params, t2, contraint_pairs) -> [make_tag s loc s]
+    | Ast.TyDcl(loc, s, params, t2, contraint_pairs) ->
+        (make_tag s loc s) :: (ctyp_info t2) (* constructors *)
     | Ast.TyAnd(loc, t1, t2(* t and t *)) -> 
         List.append (ctyp_info t1) (ctyp_info t2)
     | Ast.TyOr (loc, t1, t2(* t | t *)) -> 
         List.append (ctyp_info t1) (ctyp_info t2)
     | Ast.TyPrv(loc, t(* private t *)) -> (ctyp_info t) 
     | Ast.TyMut(loc, t (* mutable t *)) -> (ctyp_info t)
+    | Ast.TyOf(loc, t1, t2) -> (ctyp_info t1)
+    | Ast.TySum(loc, t (* top of constructors *)) -> (ctyp_info t)
     | _ -> []
 
   and module_binding_info ast =
