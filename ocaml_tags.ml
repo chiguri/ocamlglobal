@@ -34,8 +34,10 @@ module Id = struct
   (* name is printed with the -loaded-modules switch *)
   let name = "OCaml global tagger plugin"
   (* cvs id's seem to be the preferred version string *)
-  let version = "$Id: ocaml_tags.ml,v 1.7 2014/06/10 05:00:00 chiguri Exp $"
+  let version = "$Id: ocaml_tags.ml,v 1.8 2014/06/10 07:00:00 chiguri Exp $"
 end
+
+
 
 
 (* the real thing containing the real functions *)
@@ -79,8 +81,21 @@ struct
                   (*(Loc.file_name loc)*)
                   !orig_filename
                   line
-    
-  let make_tag tag loc line = (tag, loc, line)
+
+
+(* for constructor check : if your program is big, gtags will get stuck because of short of memory *)
+  let constr_check = false
+(* for changing output methodology *)
+  let seq i1 i2 = List.append i1 i2
+  let nothing = []
+  let finalize tags = List.iter print_tag tags
+  let put_tag tag loc line = [(tag, loc, line)]
+(*
+  let seq i1 i2 = ()
+  let nothing = ()
+  let finalize tags = ()
+  let put_tag tag loc line = print_tag (tag, loc, line)
+*)
 
 (* Not used : all flags are defined as specific types *)
   let mb_bool mb = 
@@ -124,75 +139,94 @@ struct
     match ast with
       (* functor (s : mt) -> mt *)
     | Ast.MtFun(loc, name, mt1, mt2) -> 
-        List.append (module_type_info mt1) (module_type_info mt2)
+        let info1 = module_type_info mt1 in
+        let info2 = module_type_info mt2 in
+        seq info1 info2
       (* sig sg end *)
     | Ast.MtSig(loc, sig_item) -> sig_item_info sig_item
-    | _ -> []
+    | _ -> nothing
 
    and ctyp_info ast =
     match ast with
     | Ast.TyCls(loc, i(* #i *) (* #point *)) -> 
         let i_name = ident_tagname i in
-        [make_tag i_name loc i_name]
+        put_tag i_name loc i_name
     | Ast.TyId (loc, i(* i *) (* Lazy.t *)) -> 
         let i_name = ident_tagname i in
-        [make_tag i_name loc i_name]
+        put_tag i_name loc i_name
       (* type t 'a 'b 'c = t constraint t = t constraint t = t *)
     | Ast.TyDcl(loc, s, params, t2, contraint_pairs) ->
-        (make_tag s loc s) :: (ctyp_info t2) (* constructors *)
+        let info1 = put_tag s loc s in
+        let info2 = ctyp_info t2 in (* constructors *)
+        seq info1 info2
     | Ast.TyAnd(loc, t1, t2(* t and t *)) -> 
-        List.append (ctyp_info t1) (ctyp_info t2)
+        let info1 = ctyp_info t1 in
+        let info2 = ctyp_info t2 in
+        seq info1 info2
     | Ast.TyOr (loc, t1, t2(* t | t *)) -> 
-        List.append (ctyp_info t1) (ctyp_info t2)
+        let info1 = ctyp_info t1 in
+        let info2 = ctyp_info t2 in
+        seq info1 info2
     | Ast.TyPrv(loc, t(* private t *)) -> (ctyp_info t) 
     | Ast.TyMut(loc, t (* mutable t *)) -> (ctyp_info t)
-    | Ast.TyOf(loc, t1, t2) -> (ctyp_info t1)
-    | Ast.TySum(loc, t (* top of constructors *)) -> (ctyp_info t)
-    | _ -> []
+      (* for constructors *)
+    | Ast.TyOf(loc, t1, t2) when constr_check -> (ctyp_info t1)
+    | Ast.TySum(loc, t (* top of constructors *)) when constr_check -> (ctyp_info t)
+    | _ -> nothing
 
   and module_binding_info ast =
     match ast with
       (* mb and mb *) (* module rec (s : mt) = me and (s : mt) = me *)
       Ast.MbAnd(loc, mb1, mb2) -> 
-        List.append (module_binding_info mb1) (module_binding_info mb2)
+        let info1 = module_binding_info mb1 in
+        let info2 = module_binding_info mb2 in
+        seq info1 info2
       (* s : mt = me *)
     | Ast.MbColEq (loc, s, mt, me) -> 
-        (make_tag s loc s)::(module_expr_info me)
+        let info1 = put_tag s loc s in
+        let info2 = module_expr_info me in
+        seq info1 info2
       (* s : mt *)
-    | Ast.MbCol (loc, s, mt) -> [make_tag s loc s]
-    | _ -> []
+    | Ast.MbCol (loc, s, mt) -> put_tag s loc s
+    | _ -> nothing
 
 
   and rec_binding_info ast =
     match ast with
       (* rb ; rb *)
     | Ast.RbSem(loc, rb1, rb2) -> 
-        List.append (rec_binding_info rb1) (rec_binding_info rb2)
+        let info1 = rec_binding_info rb1 in
+        let info2 = rec_binding_info rb2 in
+        seq info1 info2
       (* i = e *)
     | Ast.RbEq (loc, i, e) -> 
         let i_name = ident_tagname i in
-        [make_tag i_name loc i_name]
-    | _ -> []
+        put_tag i_name loc i_name
+    | _ -> nothing
 
   and patt_info ast =
     match ast with
       Ast.PaId (loc, i(* i *)) ->
         let i_tag = ident_tagname i in
-        [make_tag i_tag loc i_tag]
+        put_tag i_tag loc i_tag
     | Ast.PaAli(loc, p1, p2 (* p as p *) (* (Node x y as n) *)) -> (patt_info p2)
-    | Ast.PaAnt(loc, s (* $s$ *)) ->  [make_tag s loc ("$" ^ s ^ "$")]
+    | Ast.PaAnt(loc, s (* $s$ *)) ->  put_tag s loc ("$" ^ s ^ "$")
     | Ast.PaCom(loc, p1, p2(* p, p *)) -> 
-        List.append (patt_info p1) (patt_info p2)
+        let info1 = patt_info p1 in
+        let info2 = patt_info p2 in
+        seq info1 info2
     | Ast.PaEq (loc, i, p(* i = p *)) -> 
         let i_name = ident_tagname i in
-        (make_tag i_name loc i_name)::(patt_info p)
-    | Ast.PaStr(loc, s(* s *)) -> [make_tag s loc s]
+        let info1 =  put_tag i_name loc i_name in
+        let info2 = patt_info p in
+        seq info1 info2
+    | Ast.PaStr(loc, s(* s *)) -> put_tag s loc s
     | Ast.PaTup(loc, p(* ( p ) *)) -> patt_info p
     | Ast.PaTyc(loc, p, t(* (p : t) *)) -> patt_info p
     | Ast.PaTyp(loc, i (* #i *)) -> 
         let i_name = ident_tagname i in
-        [make_tag i_name loc ("#" ^ i_name)]
-    | _ -> []
+        put_tag i_name loc ("#" ^ i_name)
+    | _ -> nothing
     
   and sig_item_info ast = 
     match ast with
@@ -202,46 +236,59 @@ struct
     | Ast.SgClt(loc, cict) -> (class_type_info cict)
       (* sg ; sg *)
     | Ast.SgSem(loc, sg1, sg2) ->
-        List.append (sig_item_info sg1) (sig_item_info sg2)
+        let info1 = sig_item_info sg1 in
+        let info2 = sig_item_info sg2 in
+        seq info1 info2
       (* exception t *)
     | Ast.SgExc(loc, t) -> (ctyp_info t)
       (* module s : mt *)
     | Ast.SgMod(loc, s, mt) -> 
-        (make_tag s loc ("module " ^ s))::(module_type_info mt)
+        let info1 = put_tag s loc ("module " ^ s) in
+        let info2 = module_type_info mt in
+        seq info1 info2
       (* module rec mb *)
     | Ast.SgRecMod(loc, mb) -> (module_binding_info mb)
       (* module type s = mt *)
     | Ast.SgMty(loc, s, mt) -> 
-        (make_tag s loc ("module type" ^ s))::(module_type_info mt)
+        let info1 = put_tag s loc ("module type" ^ s) in
+        let info2 = module_type_info mt in
+        seq info1 info2
       (* value s : t *)
-    | Ast.SgVal(loc, s, t) -> [make_tag s loc ("value " ^ s)]
+    | Ast.SgVal(loc, s, t) -> put_tag s loc ("value " ^ s)
       (* type t *)
     | Ast.SgTyp(loc, t) -> (ctyp_info t)
-    | _ -> []
+    | _ -> nothing
 
   and module_expr_info ast = 
     match ast with
       (* me me *)
       Ast.MeApp(loc, me1, me2) -> 
-        List.append (module_expr_info me1) (module_expr_info me2)
+        let info1 = module_expr_info me1 in
+        let info2 = module_expr_info me2 in
+        seq info1 info2
       (* functor (s : mt) -> me *)
     | Ast.MeFun(loc, s, mt, me) -> (module_expr_info me)
       (* struct st end *)
     | Ast.MeStr(loc, st) -> (str_item_info st)
       (* (me : mt) *)
     | Ast.MeTyc(loc, me, mt) -> 
-        List.append (module_expr_info me) (module_type_info mt)
-    | _ -> []
+        let info1 = module_expr_info me in
+        let info2 = module_type_info mt in
+        seq info1 info2
+    | _ -> nothing
 
   and binding_info ast =
     match ast with
-      Ast.BiNil(loc) -> []
+      Ast.BiNil(loc) -> nothing
       (* bi and bi *) (* let a = 42 and c = 43 *)
-    | Ast.BiAnd(loc, bi1, bi2) -> List.append (binding_info bi1) (binding_info bi2)
+    | Ast.BiAnd(loc, bi1, bi2) ->
+        let info1 = binding_info bi1 in
+        let info2 = binding_info bi2 in
+        seq info1 info2
       (* p = e *) (* let patt = expr *)
     | Ast.BiEq (loc, p, e) -> patt_info p 
       (* $s$ *)
-    | Ast.BiAnt(loc, s) -> [make_tag s loc ("$" ^ s ^ "$")]
+    | Ast.BiAnt(loc, s) -> put_tag s loc ("$" ^ s ^ "$")
 
 
   and class_type_info ast =
@@ -250,63 +297,71 @@ struct
     | Ast.CtCon(loc, mb, i, t) -> 
         let line = if (vf_bool mb) then "class virtual " else "class " in
         let i_name = ident_tagname i in
-        [make_tag i_name loc (line ^ i_name)]
+        put_tag i_name loc (line ^ i_name)
       (* [t] -> ct *)
     | Ast.CtFun(loc, t, ct) -> class_type_info ct
       (* object ((t))? (csg)? end *)
     | Ast.CtSig(loc, t, csg) -> class_sig_item_info csg
       (* ct and ct *)
     | Ast.CtAnd(loc, ct1, ct2) -> 
-        List.append (class_type_info ct1) (class_type_info ct2)
+        let info1 = class_type_info ct1 in
+        let info2 = class_type_info ct2 in
+        seq info1 info2
       (* ct : ct *)
     | Ast.CtCol(loc, ct1, ct2) -> 
-        List.append (class_type_info ct1) (class_type_info ct2)
+        let info1 = class_type_info ct1 in
+        let info2 = class_type_info ct2 in
+        seq info1 info2
       (* ct = ct *)
     | Ast.CtEq (loc, ct1, ct2) -> class_type_info ct1
-    | _ -> []
+    | _ -> nothing
   and class_sig_item_info ast =
     match ast with
       (* csg ; csg *)
     | Ast.CgSem(loc, csg1, csg2) -> 
-        List.append (class_sig_item_info csg1) (class_sig_item_info csg2)
+        let info1 = class_sig_item_info csg1 in
+        let info2 = class_sig_item_info csg2 in
+        seq info1 info2
       (* method (private)? s : t *)
     | Ast.CgMth(loc, s, mb, t) -> 
         let line = if (pf_bool mb) then "method private " else "method " in
-        [make_tag s loc (line ^ s)]
+        put_tag s loc (line ^ s)
       (* val (mutable)? (virtual)? s : t *)
     | Ast.CgVal(loc, s, mb1, mb2, t) -> 
         let line1 = if (mf_bool mb1) then "val mutable " else "val " in
         let line2 = if (vf_bool mb2) then "virtual " else "" in
-        [make_tag s loc (line1 ^ line2 ^ s)]
+        put_tag s loc (line1 ^ line2 ^ s)
       (* method (private)? virtual s : t *)
     | Ast.CgVir(loc, s, mb, t) -> 
         let line = if (pf_bool mb) then "method private " else "method " in
-        [make_tag s loc (line ^ s)]
-    | _ -> []
+        put_tag s loc (line ^ s)
+    | _ -> nothing
   and class_str_item_info ast =
     match ast with
       (* cst ; cst *)
       Ast.CrSem(loc, cst1, cst2) -> 
-        List.append (class_str_item_info cst1) (class_str_item_info cst2)
+        let info1 = class_str_item_info cst1 in
+        let info2 = class_str_item_info cst2 in
+        seq info1 info2
       (* method (private)? s : t = e or method (private)? s = e *)
     | Ast.CrMth(loc, s, mb1, mb2, e, t) -> 
         let line1 = if (of_bool mb1) then "override " else "" in
         let line2 = if (pf_bool mb2) then "method private " else "method " in
-        [make_tag s loc (line1 ^ line2 ^ s)]
+        put_tag s loc (line1 ^ line2 ^ s)
       (* value (mutable)? s = e *)
     | Ast.CrVal(loc, s, mb1, mb2, e) -> 
         let line1 = if (of_bool mb1) then "override " else "" in
         let line2 = if (mf_bool mb2) then "val mutable " else "val " in
-        [make_tag s loc (line1 ^ line2 ^ s)]
+        put_tag s loc (line1 ^ line2 ^ s)
       (* method virtual (private)? s : t *)
     | Ast.CrVir(loc, s, mb, t) -> 
         let line = if (pf_bool mb) then "method virtual private " else "method virtual " in
-        [make_tag s loc (line ^ s)]
+        put_tag s loc (line ^ s)
       (* value (mutable)? virtual s : t *)
     | Ast.CrVvr(loc, s, mb, t) -> 
         let line = if (mf_bool mb) then "val mutual virtual " else "val virtual " in
-        [make_tag s loc (line ^ s)]
-    | _ -> []
+        put_tag s loc (line ^ s)
+    | _ -> nothing
 
   and class_expr_info ast =
     match ast with
@@ -316,24 +371,32 @@ struct
     | Ast.CeCon(loc, mb, i, t) -> 
         let tag_name = ident_tagname i in
         let line = if (vf_bool mb) then "class virtual " else "class " in
-        [make_tag tag_name loc (line ^ tag_name)]
+        put_tag tag_name loc (line ^ tag_name)
       (* fun p -> ce *)
     | Ast.CeFun(loc, p, ce) -> (class_expr_info ce)
       (* let (rec)? bi in ce *)
     | Ast.CeLet(loc, mb, bi, ce) -> 
-        List.append (binding_info bi) (class_expr_info ce)
+        let info1 = binding_info bi in
+        let info2 = class_expr_info ce in
+        seq info1 info2
       (* object ((p))? (cst)? end *)
     | Ast.CeStr(loc, p, cst) -> class_str_item_info cst
       (* ce : ct *)
     | Ast.CeTyc(loc, ce, ct) -> 
-        List.append (class_expr_info ce) (class_type_info ct)
+        let info1 = class_expr_info ce in
+        let info2 = class_type_info ct in
+        seq info1 info2
       (* ce and ce *)
     | Ast.CeAnd(loc, ce1, ce2) -> 
-        List.append (class_expr_info ce1) (class_expr_info ce2)
+        let info1 = class_expr_info ce1 in
+        let info2 = class_expr_info ce2 in
+        seq info1 info2
       (* ce = ce *)
     | Ast.CeEq (loc, ce1, ce2) -> 
-        List.append (class_expr_info ce1) (class_expr_info ce2)
-    | _ -> []
+        let info1 = class_expr_info ce1 in
+        let info2 = class_expr_info ce2 in
+        seq info1 info2
+    | _ -> nothing
     
   and str_item_info ast = 
     match ast with
@@ -343,40 +406,45 @@ struct
     | Ast.StClt(loc, cict) -> class_type_info cict
       (* st ; st *)
     | Ast.StSem(loc, st1, st2) -> 
-        List.append (str_item_info st1) (str_item_info st2)
+        let info1 = str_item_info st1 in
+        let info2 = str_item_info st2 in
+        seq info1 info2
       (* exception t or exception t = i *)
     | Ast.StExc(loc, t, i) -> (ctyp_info t)
       (* e *)
-    | Ast.StExp(loc, e) -> []
+    | Ast.StExp(loc, e) -> nothing
       (* module s = me *)
     | Ast.StMod(loc, s, me) -> 
-        let tag = make_tag s loc ("module " ^ s) in
-        tag::(module_expr_info me)
+        let info1 = put_tag s loc ("module " ^ s) in
+        let info2 = module_expr_info me in
+        seq info1 info2
       (* module rec mb *)
     | Ast.StRecMod(loc, mb) -> (module_binding_info mb)
       (* module type s = mt *)
     | Ast.StMty(loc, s, mt) -> 
-        (make_tag s loc ("module " ^ s))::(module_type_info mt)
+        let info1 = put_tag s loc ("module " ^ s) in
+        let info2 = module_type_info mt in
+        seq info1 info2
       (* value (rec)? bi *)
     | Ast.StVal(loc, mb, bi) -> (binding_info bi)
       (* type t *)
     | Ast.StTyp(loc, t) -> (ctyp_info t)
-    | _ -> []
+    | _ -> nothing
 
   (* print_interf shall be called on .mli files *)
   let print_interf ?input_file ?output_file ast =
     orig_filename := opt_string input_file;
-    let tags = sig_item_info ast in
     print_file_tag (opt_string input_file);
-    List.iter print_tag tags
+    let tags = sig_item_info ast in
+    finalize tags
 
 
   (* print_implem shall be called on .ml files *)
   let print_implem ?input_file ?output_file ast =
     orig_filename := opt_string input_file;
-    let tags = str_item_info ast in
     print_file_tag (opt_string input_file);
-    List.iter print_tag tags
+    let tags = str_item_info ast in
+    finalize tags
 
       
 end
