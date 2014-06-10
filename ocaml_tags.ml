@@ -1,5 +1,6 @@
 (* ocaml_tags.ml
  * Matthew Hague (matth1982@gmail.com)
+ * Modified by Sosuke Moriguchi (chiguri.s@gmail.com)
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -24,10 +25,16 @@ open Camlp4.Sig;;
 
 (* identification module *)
 module Id = struct
+  (*
   (* name is printed with the -loaded-modules switch *)
   let name = "Ocaml global tagger plugin"
   (* cvs id's seem to be the preferred version string *)
   let version = "$Id: ocaml_tags.ml,v 1.6 2009/05/24 21:37:09 matth Exp $"
+  *)
+  (* name is printed with the -loaded-modules switch *)
+  let name = "OCaml global tagger plugin"
+  (* cvs id's seem to be the preferred version string *)
+  let version = "$Id: ocaml_tags.ml,v 1.7 2014/06/10 05:00:00 chiguri Exp $"
 end
 
 
@@ -259,18 +266,18 @@ struct
       (* csg ; csg *)
     | Ast.CgSem(loc, csg1, csg2) -> 
         List.append (class_sig_item_info csg1) (class_sig_item_info csg2)
-      (* method s : t or method private s : t *)
+      (* method (private)? s : t *)
     | Ast.CgMth(loc, s, mb, t) -> 
         let line = if (pf_bool mb) then "method private " else "method " in
         [make_tag s loc (line ^ s)]
-      (* value (virtual)? (mutable)? s : t *)
+      (* val (mutable)? (virtual)? s : t *)
     | Ast.CgVal(loc, s, mb1, mb2, t) -> 
-        let line2 = if (mf_bool mb1) then "virtual " else "" in
-        let line1 = if (vf_bool mb2) then "mutable " else "" in
+        let line1 = if (mf_bool mb1) then "val mutable " else "val " in
+        let line2 = if (vf_bool mb2) then "virtual " else "" in
         [make_tag s loc (line1 ^ line2 ^ s)]
-      (* method virtual (mutable)? s : t *)
+      (* method (private)? virtual s : t *)
     | Ast.CgVir(loc, s, mb, t) -> 
-        let line = if (pf_bool mb) then "method virtual " else "method " in
+        let line = if (pf_bool mb) then "method private " else "method " in
         [make_tag s loc (line ^ s)]
     | _ -> []
   and class_str_item_info ast =
@@ -286,15 +293,15 @@ struct
       (* value (mutable)? s = e *)
     | Ast.CrVal(loc, s, mb1, mb2, e) -> 
         let line1 = if (of_bool mb1) then "override " else "" in
-        let line2 = if (mf_bool mb2) then "value mutable " else "value " in
+        let line2 = if (mf_bool mb2) then "val mutable " else "val " in
         [make_tag s loc (line1 ^ line2 ^ s)]
       (* method virtual (private)? s : t *)
     | Ast.CrVir(loc, s, mb, t) -> 
         let line = if (pf_bool mb) then "method virtual private " else "method virtual " in
         [make_tag s loc (line ^ s)]
-      (* value virtual (private)? s : t *)
+      (* value (mutable)? virtual s : t *)
     | Ast.CrVvr(loc, s, mb, t) -> 
-        let line = if (mf_bool mb) then "value virtual private " else "value virtual " in
+        let line = if (mf_bool mb) then "val mutual virtual " else "val virtual " in
         [make_tag s loc (line ^ s)]
     | _ -> []
 
