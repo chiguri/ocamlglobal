@@ -88,8 +88,9 @@ struct
 (* for changing output methodology *)
   let seq i1 i2 = List.append i1 i2
   let nothing = []
-  let finalize tags = List.iter print_tag tags
+  let finalize tags = print_file_tag !orig_filename; List.iter print_tag tags
   let put_tag tag loc line = [(tag, loc, line)]
+  let print_file_tag filename = () (* to avoid printing filename when an error occurs *)
 (*
   let seq i1 i2 = ()
   let nothing = ()
